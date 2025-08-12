@@ -26,7 +26,11 @@ jobs:
 
       - name: Run scraper
         run: |
-          python -m scraper.runner --site rossmann --profiles desktop,mobile --headless true --save-snapshots true
+          python -m scraper.runner --site rossmann --profiles desktop,mobile --headless true --save-snapshots true || true
+          echo "--- DATA DIR ---"
+          ls -R data || true
+          echo "--- FILES FOUND ---"
+          find . -type f | sort
 
       - name: Upload artifact (data/)
         uses: actions/upload-artifact@v4
