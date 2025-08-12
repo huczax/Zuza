@@ -36,11 +36,7 @@ jobs:
         run: |
           python -m playwright install --with-deps chromium
 
-        - name: Install Playwright browsers + system deps
-        run: |
-          python -m playwright install --with-deps chromium
-
-      - name: "Sanity check Playwright"
+      - name: Sanity check Playwright
         env:
           PYTHONUNBUFFERED: "1"
         run: |
@@ -57,7 +53,7 @@ jobs:
           asyncio.run(t())
           PY
 
-      - name: "Smoke-test: zapisz screenshot do data/"
+      - name: Smoke-test: zapisz screenshot do data/
         env:
           PYTHONUNBUFFERED: "1"
         run: |
@@ -83,7 +79,7 @@ jobs:
           getent hosts www.rossmann.pl || true
           curl -I --max-time 20 https://www.rossmann.pl/robots.txt || exit 1
 
-      - name: "Run scraper (debug) + list outputs"
+      - name: Run scraper (debug) + list outputs
         env:
           LOGURU_LEVEL: DEBUG
           PYTHONUNBUFFERED: "1"
@@ -109,7 +105,7 @@ jobs:
           # health_report.json:
           test -s "$D/health_report.json" || { echo "Brak lub pusty health_report.json"; exit 1; }
 
-      - name: "Upload artifact (data/)"
+      - name: Upload artifact (data/)
         uses: actions/upload-artifact@v4
         with:
           name: data-${{ github.run_id }}
