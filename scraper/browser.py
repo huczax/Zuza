@@ -1,51 +1,81 @@
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
-from loguru import logger
-from playwright.async_api import async_playwright
-import os, random, yaml, pathlib
-
-load_dotenv()
-
-DESKTOP_VIEWPORTS = [(1280,800),(1440,900),(1600,900),(1920,1080)]
-MOBILE_VIEWPORTS  = [(390,844),(412,915),(360,780),(393,873)]
-
-STEALTH_INIT_SCRIPT = """
-Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
-"""
-
-def _pick_ua(profile: str) -> str | None:
-    st = yaml.safe_load(pathlib.Path("config/settings.yaml").read_text())
-    pool = st.get("user_agents", {}).get("desktop" if profile=="desktop" else "mobile", [])
-    return random.choice(pool) if pool else None
-
-from contextlib import asynccontextmanager
+import argparse, datetime, os, sys, json, asyncio
 from pathlib import Path
+from loguru import logger
 
-@asynccontextmanager
-async def browser_context(
-    profile: str = "desktop",
-    headless: bool = True,
-    start_tracing: bool = False,
-    snapshots_dir: str | None = None,
-):
-    """
-    Tworzy kontekst przeglądarki Playwright z ustawieniami profilu.
-    """
-    from playwright.async_api import async_playwright
+from scraper.browser import browser_context
+# from scraper import extract  # odkomentuj gdy będzie potrzebne
 
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=headless)
-        ctx = await browser.new_context(
-            viewport={"width": 1366, "height": 768} if profile == "desktop" else {"width": 390, "height": 844}
-        )
-        try:
-            if start_tracing:
-                await ctx.tracing.start(screenshots=True, snapshots=True)
-            yield ctx
-        finally:
-            if start_tracing and snapshots_dir:
-                Path(snapshots_dir).mkdir(parents=True, exist_ok=True)
-                await ctx.tracing.stop(path=str(Path(snapshots_dir) / "trace.zip"))
-            await ctx.close()
-            await browser.close()
+parser = argparse.ArgumentParser()
+parser.add_argument("--site", required=True)
+parser.add_argument("--profiles", default="desktop")  # np. "desktop,mobile"
+parser.add_argument("--headless", default="true")
+parser.add_argument("--save-snapshots", default="false")
+args = parser.parse_args()
+
+today = datetime.date.today().isoformat()
+base_dir = Path(f"data/{args.site}/{today}")
+images_dir = base_dir / "images"
+snapshots_dir = base_dir / "snapshots"
+images_dir.mkdir(parents=True, exist_ok=True)
+snapshots_dir.mkdir(parents=True, exist_ok=True)
+
+headless = args.headless.lower() == "true"
+save_snaps = args.save_snapshots.lower() == "true"
+
+visited = 0
+errors = 0
+health = {
+    "site": args.site,
+    "date": today,
+    "profiles": args.profiles.split(","),
+    "visited_urls": 0,
+    "errors": 0,
+}
+
+async def run_profile(profile: str):
+    global visited
+    try:
+        async with browser_context(
+            profile=profile,
+            headless=headless,
+            start_tracing=save_snaps,
+            snapshots_dir=str(snapshots_dir) if save_snaps else None,
+        ) as ctx:
+            page = await ctx.new_page()
+            await page.goto("https://www.rossmann.pl", wait_until="domcontentloaded")
+            # out = await extract.run(page)  # jeśli potrzebujesz
+            if save_snaps:
+                # zrzut strony startowej per profil
+                await page.screenshot(path=str(snapshots_dir / f"{profile}-landing.png"), full_page=True)
+        logger.debug(f"Visited profile: {profile}")
+        visited += 1
+    except Exception:
+        global errors
+        errors += 1
+        logger.exception("Scrape error")
+
+async def main():
+    tasks = []
+    for p in args.profiles.split(","):
+        tasks.append(run_profile(p.strip()))
+    await asyncio.gather(*tasks)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    try:
+        report = {
+            **health,
+            "visited_urls": visited,
+            "errors": errors,
+            "snapshots_count": len(list(snapshots_dir.glob("*"))) if snapshots_dir.exists() else 0,
+            "ok": errors == 0 and visited > 0,
+        }
+        base_dir.mkdir(parents=True, exist_ok=True)
+        with open(base_dir / "health_report.json", "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        print("Health report saved:", base_dir / "health_report.json")
+        # jeżeli ktoś włączy save-snapshots, a nic nie powstało — zostaw ślad
+        if save_snaps and report["snapshots_count"] == 0:
+            (snapshots_dir / "KEEP").write_text("no snapshots produced by pipeline logic\n", encoding="utf-8")
+    except Exception as e:
+        print("Failed to write health_report.json:", e, file=sys.stderr)
