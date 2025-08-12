@@ -15,84 +15,182 @@ python -m scraper.runner --site rossmann --profiles desktop,mobile --headless tr
 ## Wymagania projektu (z pliku)
 
 ```
-Zaczynamy nowy projekt. Budujemy uniwersalny scraper konkurencji. Mam ponad 20 stron które chciałbym szczegółowo monitorować dlatego mechanizm scrapera musi być elastyczny i w miarę możliwości uniwersalny. chciałbym wskazywać konkretne miejsca na stronach internetowych za pomocą kodu skopiowanego w inspektorze w przeglądarce całej sekcji, z których dane mają być pobierane (tekstowe i grafiki). Trzymajmy logikę w osobnej canvie, lub dokumencie aby można było ją szybko zmodyfikować a po modyfikacji chciałbym aby zmiany były aplikowane w całym projekcie. pierwszy konkurent: https://www.rossmann.pl/
+Zuza – Architektura i Plan Realizacji
 
-Oto wstępna logika:
+Dokument opisuje architekturę docelowego projektu „Zuza”: scraper Playwright (Python) z harmonogramem (GitHub Actions), snapshotami, raportem zdrowia, wykrywaniem zmian i przygotowaniem pod skalowanie. Uwzględnia to, co wypracowaliśmy w trakcie prac (sanity/smoke, preflight, artefakty, retry, proxy, itp.). Na końcu znajdziesz sekwencję promptów do Codexa, którą możesz wykonać krok po kroku.
 
-mechanizm sprawdzający, czy dane pobierają się poprawnie, co nie jest takie oczywiste bo w każdej chwili strona konkurenta może zostać zaktualizowana więc chciałbym monitorować to zawczasu aby przygotować update. (priorytet - minimum. skupmy się w pierwszej kolejności na najważniejszych rzeczach ale jeśli jesteś w stanie to zrobić od razu to super).
-pobieranie wszystkich grafik slidera (w wersji desktop i mobile) i zapis w formacie .jpg lub .png a w dalszym etapie optymalizacji (no chyba, że można zrobić od razu) następnie ekstrakcja tekstów z grafik i analiza AI polegająca na próbie zinterpretowania promocji czy ceny i nazwy produktu i innych informacji. Lokalizacje poszczególnych obiektów do śledzenia poniżej. Użyj takich narzędzi aby nawet po zmianie contentu na stronie rossmann nasz scraper zbierał odpowiednie dane ze wskazanych miejsc. Użyj jak najwięcej dobrych praktych debuggowania na każdym kroku aby jak najniższym kosztem i jak najszybciej osiągnąć zamierzony cel. korzystaj z darmowych technologii i łącz możłiwości różne kreatywnie. korzystaj z już sprawdzonych i przetestowanych szablonów, nie budujmu wszystkiego od zera. Wprowadzaj wiele modyfikacji na raz i je testuj aby później bez komplikacji przenieść rozwiązanie na serwer w usłudze render minimalnym kosztem. dodaj funkcje stealth aby zmniejszyć widoczność scrapera.
+1) Cele i zakres
 
-Proponowany setup. Jeśli możesz ulepszyć. zrób to:
+Cele biznesowe
+Codzienny zrzut stanu strony (Rossmann → docelowo więcej serwisów).
+Stabilny run bez ręcznej interwencji; szybka diagnoza w razie awarii.
+Zapisy snapshotów i metadanych, by móc: porównywać zmiany, debugować, odtwarzać kontekst.
+Zakres techniczny (MVP → v1.0)
+Python + Playwright (Chromium), headless, profile desktop/mobile.
+Folder dzienny: data/<site>/<YYYY-MM-DD>/{images,snapshots,items.jsonl,health_report.json}.
+CI/CD: GitHub Actions (manual + cron), sanity/smoke, preflight DNS/HTTP, asercje artefaktów.
+Raport zdrowia z metrykami i kodami błędów.
+(Po MVP) diffing zmian, alerty, proxy/IPv4, orkiestracja wielu serwisów.
 
-Python + Playwright(renderuje JS, pewne na dynamicznych stronach jak Rossmann) + YAML/JSON konfiguracje
+2) Widok wysokopoziomowy
 
-monitoring 2x na 24h czy strona uległa zmianie. Jeśli tak, wyślij powiadomienie na mail. możliwość wybrania godzin sprawdzania strony.
++-------------------+     +-------------------+
+|  GitHub Actions   |-->--|  Playwright Ctnr  |--+---> data/<site>/<date>/
+|  (cron, manual)   |     |  (python:3.10)    |  |
++---------+---------+     +---------+---------+  |
+          |                         |            |
+          | sanity/smoke/preflight  |            |
+          v                         v            v
+   health & artefakty         scraper.runner   health_report.json
 
-Alerty: na razie log + raport diff + email: test.transfer416@passinbox.com
+Główne komponenty
+scraper/runner.py – orkiestracja runu, katalogi, zrzuty, zapis health report.
+scraper/browser.py – browser_context(...), safe_goto(...), network_settle(...), retry/backoff, trace/snapshots.
+scraper/extract.py – ekstrakcja danych domenowych (MVP: kilka pól produktu; później rozszerzenia).
+scraper/diffing.py – porównanie z wczoraj/ostatnim runem, generowanie zmian.
+scraper/storage.py – zapisy/odczyty plików, (w przyszłości) S3/GCS.
+scraper/health.py – schemat raportu i utilsy do metryk.
+scraper/alerts.py – (po MVP) powiadomienia (e-mail/Slack/Webhook).
+scraper/utils.py – narzędzia wspólne (czas, rozmiary plików, itp.).
 
-stwórz mechanizm który po wskazaniu całej sekcji na stronie pełny outerHTML sekcji z inspektora, wyszuka i oczyści kod znajdując miejsca poszczególnych miejsc do scrapowania na podstawie zdefiniowanego wzorca. (większość tych sekcji ma taką samą konstrukcję lub podobną). system powinien automatycznie wyprowadzić stabilny selektor
+3) Struktura repo i układ danych
+.github/workflows/
+  scrape-rossmann.yml
+config/
+  settings.yaml
+  sites/rossmann.yaml
+scraper/
+  __init__.py
+  browser.py
+  runner.py
+  extract.py
+  diffing.py
+  storage.py
+  health.py
+  alerts.py
+  utils.py
+data/
+  <site>/<YYYY-MM-DD>/
+    images/
+    snapshots/
+    items.jsonl         # (opcjonalnie w MVP, docelowo tak)
+    health_report.json
 
-centralny plik konfiguracyjny YAML (np. config/sites/rossmann.yaml), gdzie dla każdej sekcji:
-name: „hero_slider”
-input: {type: "outerHTML" | "css" | "xpath", value: "…"}
-fields: co wyciągać (images: desktop img@src + mobile source[srcset], alt, link href, teksty)
-walidacja (min_count, required_attrs)
-Dane wyjściowe i struktura plików
-Format danych: JSON Lines (NDJSON), JSON per-uruchomienie, CSV? Dla obrazów — zapis plików + metadane (hash, url, alt).
-Proponuję standard:
-data/rossmann/YYYY-MM-DD/run.jsonl (wszystkie rekordy)
-data/rossmann/YYYY-MM-DD/images/{hash}.{jpg|png}
-logs/… (logi i health-checki)
-OK?
-Monitoring zmian i health-check (Priorytet 1)
-Minimalny mechanizm „czy się pobiera”:
-sprawdzamy, czy każdy target z configu zwrócił co najmniej min_count elementów
-spisujemy liczbę, kluczowe pola (np. listę URL-i obrazów) i porównujemy z poprzednim runem (diff)
-jeżeli brak/duże odchylenie → status=alert
-Czy taki minimalny zestaw OK? Czy od razu dorzucać progi zmian (np. „zmiana >40% obrazów = alert”)?
-OCR i interpretacja AI (Priorytet 2)
-Czy uruchamiamy OCR od razu? (Tesseract + polskie słowniki; preprocessing: odszumianie/kontrast)
-Interpretacja: zaczynamy od heurystyk (regex ceny, % zniżki, daty, marki z ALT) i dodamy moduł AI później, może nawet w automatyzacji n8n. Języki OCR: PL wystarczy
+Kontrakty I/O
 
-Struktura projektu w Pythonie z podziałem na moduły (runner, fetch, extract, storage, health, diff, utils).
+Wejście: konfiguracja site (URL startowe, selektory, parametry profili) w config/sites/<site>.yaml.
 
-Konfiguracja YAML (rules.yaml) z definiowaniem stron, selektorów, pól, walidacji, trybu OCR, zapisu obrazów, ustawień przeglądarki itp.
+Wyjście:
+images/ – screenshoty poglądowe.
+snapshots/ – screenshoty/trace’y/sygnatury, wymagane do walidacji.
+items.jsonl – rekordy danych (JSON Lines; 1 wiersz = 1 obiekt).
+health_report.json – raport runu (schemat poniżej).
 
-Obsługa Playwright z minimalnym trybem stealth, różnymi profilami (desktop/mobile) i losowym UA.
+4) Konfiguracja środowiska
+Python 3.10 (zgodny z obrazem Playwright v1.54.0-jammy).
+requirements.txt – pin playwright==1.54.0 + loguru, tenacity, PyYAML, pillow, pytesseract, rapidfuzz, python-dotenv.
+Instalacja przeglądarek + system deps (na runnerze CI):
+python -m playwright install --with-deps chromium
+Zmienne środowiskowe (opcjonalne/planowane):
+LOGURU_LEVEL=DEBUG
+ZUZA_FORCE_IPV4=1 – wymuszenie IPv4/wyłączenie AsyncDNS (flagą do chrome).
+HTTP_PROXY, HTTPS_PROXY, NO_PROXY – obsługa proxy.
+ZUZA_SAVE_SNAPSHOTS=true – wymuszenie snapshotów.
 
-OCR (Tesseract PL) z prostym pre-processingiem, zapisem tekstu do CSV.
+5) GitHub Actions (CI/CD)
+Workflow .github/workflows/scrape-rossmann.yml:
+Trigerry: workflow_dispatch, schedule: '30 4 * * *' (UTC).
+Container: mcr.microsoft.com/playwright/python:v1.54.0-jammy.
 
-Zapisywanie danych do CSV + obrazów na dysku + raportów zdrowia (health_report.json) i prostego diff.json.
+Kroki:
 
-System logowania (loguru) z trybem debug i rotacją plików.
+Checkout.
+Upgrade pip + pip install -r requirements.txt (pin Playwright 1.54.0).
+python -m playwright install --with-deps chromium.
+Sanity (example.com) – szybka weryfikacja środowiska.
+Smoke-test (zrzut z rossmann.pl do images/).
+Preflight DNS/HTTP (getent hosts, curl -I https://www.rossmann.pl/robots.txt).
+Run scraper (desktop+mobile, headless=true, save-snapshots=true).
+Asercje: musi istnieć co najmniej 1 plik w snapshots/ oraz niepusty health_report.json.
+Upload artefaktu data/**.
+Stabilność: concurrency (cancel-in-progress) + timeout-minutes na jobie.
 
-Obsługa statycznych URL-i obrazów i selektorów CSS/XPath.
+6) Kontrakty modułów
+browser.py
+async def browser_context(profile: str, headless: bool, start_tracing: bool=False, snapshots_dir: str|None=None, proxy: dict|None=None) -> async contextmanager:
+Profile modyfikuje UA, viewport, emulację (desktop/mobile).
+Obsługa flag Chromium (IPv4, wyłączenie AsyncDNS), integracja proxy.
+(Opcjonalnie) trace start/stop do snapshots/ (pliki .zip/.trace/.png).
+async def safe_goto(page, url, timeout_ms=30000, retries=3, backoff=1.5, force_ipv4_env="ZUZA_FORCE_IPV4") – retry/backoff, normalizacja błędów.
+async def network_settle(page, idle_ms=800) – krótka stabilizacja sieci.
+runner.py
+Parametry: --site, --profiles, --headless, --save-snapshots.
+Tworzy katalog dzienny i podkatalogi; na profil robi co najmniej:
+wejście na stronę główną i snapshot (gdy --save-snapshots true).
+minimalny screenshot do images/.
+Zapisuje health_report.json zgodny ze schematem (poniżej).
+extract.py (MVP)
+async def run(page) -> list[dict] – zwraca listę rekordów {brand,title,price,image_url,alt}; wynik dopisywany do items.jsonl.
+diffing.py
+Porównanie items.jsonl (dziś vs wczoraj) → zmiany added/removed/changed.
+storage.py
+Helpery: zapisy JSONL, bezpieczne ścieżki, opcjonalnie backend S3/GCS.
+health.py
+write_health_report(path, payload) i walidacja schematu.
+alerts.py
+(Po MVP) Webhook/Slack/Email na ok=false lub duże zmiany.
 
-Opcjonalny tryb headful z CLI + teraz dodatkowo z konfiguracji YAML.
+7) Schemat health_report.json
+Przykład:
+{
+  "site": "rossmann",
+  "date": "2025-08-12",
+  "profiles": ["desktop","mobile"],
+  "visited_urls": 2,
+  "errors": 0,
+  "snapshots_count": 3,
+  "ok": true,
+  "metrics": {
+    "run_ms": 23145,
+    "snapshots_bytes_sum": 5423981
+  },
+  "network": {
+    "force_ipv4": true,
+    "proxy_used": false
+  },
+  "notes": []
+}
 
-Podstawowe walidacje wyników (min_count, required_any).
+Wymagane pola (asercje CI): snapshots_count > 0 oraz plik niepusty.
 
-Konteneryzacja (Dockerfile, requirements, komendy PowerShell/CLI).
+8) Błędy i twarde problemy
+net::ERR_ADDRESS_UNREACHABLE – najczęściej problem DNS/IPv6/HTTP blokada. Działania: preflight getent hosts + curl, opcjonalnie wymusić IPv4 (ZUZA_FORCE_IPV4=1 → flagi Chromium), ewentualnie proxy.
+Brak system deps dla Playwright → zawsze uruchamiać python -m playwright install --with-deps chromium w CI.
+Puste snapshots/ – wymuś co najmniej 1 snapshot per profil (landing) nawet przy błędach ekstrakcji.
 
-Instrukcje uruchomienia (README) i .env.example.
+9) Bezpieczeństwo, stabilność, skalowanie
+Bezpieczeństwo: brak sekretów w logach; proxy/klucze tylko z secrets.
+Stabilność: retry/backoff w nawigacji, timeout-minutes w workflow, concurrency.
+Skalowanie: poziome po site/profilach; kolejny krok – matrix jobs; artefakty per-site; opcjonalny cache.
+Retencja: trzymać N dni; rotacja przez job cleanup (po v1.0) lub przenoszenie do S3.
 
-⚙ Do zrobienia / możliwe ulepszenia:
+10) Testy i QA
+Sanity: wejście na example.com, print tytułu.
+Smoke: screenshot landing do images/.
+Asercje CI: istnienie >0 plików w snapshots/ oraz niepustego health_report.json.
+QA lokalne: scripts/qa_check.py --site rossmann --date YYYY-MM-DD (sprawdza strukturę i pola raportu).
+Testy domenowe: minimalne asercje selektorów z config/sites/rossmann.yaml.
 
-Zamykanie contextów Playwright po użyciu (context.close()), aby uniknąć wycieków pamięci.
+11) Roadmap (MVP → v1.0)
+MVP: stabilny run, snapshoty, health report, CI artefakty, sanity/smoke/preflight.
+v0.9: retry/backoff w safe_goto, minimalny items.jsonl, metryki w health_report.json.
+v1.0: diffing, alerty, proxy/IPv4 feature flag, QA script, retencja danych.
 
-Rozbudowa diff — porównywanie CSV rekord-po-rekordzie, a nie tylko generowanie baseline.
-
-Obsługa parent_href i innych pól zależnych od struktury DOM (poprawka selektorów).
-
-Retry & timeout dla page.goto i pobierania obrazów (page.request.get).
-
-Lepsza obsługa formatów obrazów (webp/avif) i Content-Type zamiast samego rozszerzenia.
-
-Optymalizacja OCR — resize, threshold, batch processing.
-
-Alerty (e-mail / Slack) w przypadku niepowodzeń walidacji lub zmian w diff.
-
-Równoległe pobieranie (np. asyncio lub multi-context), by skrócić czas scrapingu.
+12) Kryteria akceptacji (Definition of Done)
+Cron uruchamia się codziennie; manual działa.
+data/<site>/<today>/snapshots/* zawiera >0 plików.
+health_report.json jest niepusty i ok==true dla zielonego runu.
+Artefakt w Actions zawiera przynajmniej images/smoke.png, snapshots/*, health_report.json.u.
 
 Lokalizacje elementów do trackowania:
 Sekcja 1 (Slider):
