@@ -3,14 +3,13 @@ name: scrape-rossmann
 on:
   workflow_dispatch:
   schedule:
-    # Uwaga: CRON jest w UTC. 04:30 UTC = 06:30 w Warszawie latem, 05:30 zimą.
+    # 04:30 UTC = 06:30 PL latem, 05:30 zimą
     - cron: '30 4 * * *'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
-    # Stabilne środowisko: Playwright + przeglądarki w obrazie
     container:
       image: mcr.microsoft.com/playwright/python:v1.54.0-jammy
 
@@ -21,11 +20,12 @@ jobs:
       - name: Upgrade pip + install deps
         run: |
           python -m pip install --upgrade pip setuptools wheel
+          # Rekomendacja: w requirements.txt ustaw playwright==1.54.0
           if [ -f requirements.txt ]; then
+            grep -E '^playwright' requirements.txt || echo 'playwright==1.54.0' >> requirements.txt
             pip install -r requirements.txt
           fi
 
-      # Szybki test, że Playwright działa i ma sieć
       - name: Sanity check Playwright
         env:
           PYTHONUNBUFFERED: "1"
