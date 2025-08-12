@@ -19,28 +19,33 @@ def _pick_ua(profile: str) -> str | None:
     pool = st.get("user_agents", {}).get("desktop" if profile=="desktop" else "mobile", [])
     return random.choice(pool) if pool else None
 
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 @asynccontextmanager
-async def browser_context(profile: str = "desktop", headless: bool = True):
-    proxy = os.getenv("PROXY_URL") or None
-    async with async_playwright() as p:
-        b = await p.chromium.launch(headless=headless, args=[
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox","--disable-dev-shm-usage",
-        ])
-        viewport = random.choice(DESKTOP_VIEWPORTS if profile=="desktop" else MOBILE_VIEWPORTS)
-        ua = _pick_ua(profile)
-        context = await b.new_context(
-            user_agent=ua,
-            viewport={"width": viewport[0], "height": viewport[1]},
-            device_scale_factor=1.0 if profile=="desktop" else 2.0,
-            is_mobile=(profile!="desktop"),
-            proxy={"server": proxy} if proxy else None,
-            java_script_enabled=True,
-            locale="pl-PL",
+async def browser_context(
+    profile: str = "desktop",
+    headless: bool = True,
+    start_tracing: bool = False,
+    snapshots_dir: str | None = None,
+):
+    """
+    Tworzy kontekst przeglądarki Playwright z ustawieniami profilu.
+    """
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=headless)
+        ctx = await browser.new_context(
+            viewport={"width": 1366, "height": 768} if profile == "desktop" else {"width": 390, "height": 844}
         )
-        await context.add_init_script(STEALTH_INIT_SCRIPT)
         try:
-            yield context
+            if start_tracing:
+                await ctx.tracing.start(screenshots=True, snapshots=True)
+            yield ctx
         finally:
-            await context.close()
-            await b.close()
+            if start_tracing and snapshots_dir:
+                Path(snapshots_dir).mkdir(parents=True, exist_ok=True)
+                await ctx.tracing.stop(path=str(Path(snapshots_dir) / "trace.zip"))
+            await ctx.close()
+            await browser.close()
