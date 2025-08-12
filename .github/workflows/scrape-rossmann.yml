@@ -52,6 +52,26 @@ jobs:
           asyncio.run(t())
           PY
 
+      - name: Smoke-test: zapisz screenshot do data/
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python - <<'PY'
+          import asyncio, os, datetime
+          from scraper.browser import browser_context
+          async def main():
+              today = datetime.date.today().isoformat()
+              out_dir = f"data/rossmann/{today}/images"
+              os.makedirs(out_dir, exist_ok=True)
+              async with browser_context(profile="desktop", headless=True) as ctx:
+                  p = await ctx.new_page()
+                  await p.goto("https://www.rossmann.pl", wait_until="domcontentloaded")
+                  path = f"{out_dir}/smoke.png"
+                  await p.screenshot(path=path, full_page=True)
+                  print("Saved:", path, "size:", os.path.getsize(path), "bytes")
+          asyncio.run(main())
+          PY
+
       - name: Run scraper (debug) + list outputs
         env:
           LOGURU_LEVEL: DEBUG
