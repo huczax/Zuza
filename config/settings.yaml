@@ -1,0 +1,15 @@
+user_agents:
+  desktop:
+    - Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36
+  mobile:
+    - Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36
+
+alert_thresholds:
+  major_change_ratio: 0.40
+
+timeouts:
+  goto_ms: 30000
+  wait_network_idle_ms: 2000
+
+scrape:
+  profiles: [desktop, mobile]

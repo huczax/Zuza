@@ -1,0 +1,19 @@
+[project]
+name = "zuza-scraper"
+version = "0.1.0"
+description = "ZUZA production-grade web scraper (Playwright + YAML)"
+authors = [{name="ZUZA", email="data@example.com"}]
+requires-python = ">=3.11"
+dependencies = [
+  "playwright>=1.45",
+  "PyYAML>=6.0",
+  "loguru>=0.7",
+  "python-dotenv>=1.0",
+  "tenacity>=8.2",
+  "pillow>=10.2",
+  "pytesseract>=0.3",
+  "rapidfuzz>=3.9"
+]
+
+[project.scripts]
+zuza = "scraper.runner:cli_entry"
