@@ -13,6 +13,11 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright/python:v1.54.0-jammy
 
+    # używaj bash we wszystkich krokach
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,9 +25,13 @@ jobs:
       - name: Upgrade pip + install deps
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # Rekomendacja: w requirements.txt ustaw playwright==1.54.0
           if [ -f requirements.txt ]; then
-            grep -E '^playwright' requirements.txt || echo 'playwright==1.54.0' >> requirements.txt
+            # pinujemy do 1.54.0 (zgodnie z obrazem)
+            if grep -qE '^playwright' requirements.txt; then
+              sed -i 's/^playwright.*/playwright==1.54.0/' requirements.txt
+            else
+              echo 'playwright==1.54.0' >> requirements.txt
+            fi
             pip install -r requirements.txt
           fi
 
