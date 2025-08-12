@@ -1,0 +1,38 @@
+name: scrape-rossmann
+
+on:
+  workflow_dispatch:    # pozwala uruchomić ręcznie z UI
+  schedule:
+    - cron: '30 4 * * *'   # codziennie o 04:30 UTC = 06:30 w Warszawie (lato)
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt || true
+          python -m pip install . || true
+
+      # To instaluje przeglądarki Playwright + zależności systemowe
+      - name: Install browsers
+        uses: microsoft/playwright-github-action@v1
+        with:
+          with-deps: true
+
+      - name: Run scraper
+        run: |
+          python -m scraper.runner --site rossmann --profiles desktop,mobile --headless true --save-snapshots true
+
+      - name: Upload artifact (data)
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-${{ github.run_id }}
+          path: data/**
