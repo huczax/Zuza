@@ -3,13 +3,14 @@ name: scrape-rossmann
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 4 * * *'    # 06:30 w Warszawie (lato)
+    # Uwaga: CRON jest w UTC. 04:30 UTC = 06:30 w Warszawie latem, 05:30 zimą.
+    - cron: '30 4 * * *'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
-    # Obraz z gotowym Playwrightem i przeglądarkami
+    # Stabilne środowisko: Playwright + przeglądarki w obrazie
     container:
       image: mcr.microsoft.com/playwright/python:v1.45.0-jammy
 
@@ -24,16 +25,43 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Run scraper
+      # Szybki test, że Playwright działa i ma sieć
+      - name: Sanity check Playwright
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
-          python -m scraper.runner --site rossmann --profiles desktop,mobile --headless true --save-snapshots true || true
+          python - <<'PY'
+          import asyncio
+          from scraper.browser import browser_context
+          from scraper.utils import safe_goto, network_settle
+          async def t():
+              async with browser_context(profile="desktop", headless=True) as ctx:
+                  p = await ctx.new_page()
+                  await safe_goto(p, "https://example.com")
+                  await network_settle(p, 500)
+                  print("TITLE:", await p.title())
+          asyncio.run(t())
+          PY
+
+      - name: Run scraper (debug) + list outputs
+        env:
+          LOGURU_LEVEL: DEBUG
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          python -m scraper.runner --site rossmann --profiles desktop,mobile --headless true --save-snapshots true
           echo "--- DATA DIR ---"
           ls -R data || true
           echo "--- FILES FOUND ---"
           find . -type f | sort
+          echo "--- HEALTH REPORT (if present) ---"
+          if ls data/rossmann/*/health_report.json >/dev/null 2>&1; then
+            sed -n '1,200p' data/rossmann/*/health_report.json
+          fi
 
       - name: Upload artifact (data/)
         uses: actions/upload-artifact@v4
         with:
           name: data-${{ github.run_id }}
           path: data/**
+          if-no-files-found: warn
