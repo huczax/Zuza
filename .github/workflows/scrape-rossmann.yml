@@ -88,6 +88,16 @@ jobs:
             sed -n '1,200p' data/rossmann/*/health_report.json
           fi
 
+      - name: Assert snapshots & health report exist
+        run: |
+          set -euo pipefail
+          D="data/rossmann/$(date -u +%F)"   # scraper używa dzisiejszej daty
+          test -d "$D/snapshots" || { echo "Brak katalogu snapshots w $D"; exit 1; }
+          # co najmniej 1 plik w snapshots:
+          ls -1 "$D/snapshots"/* >/dev/null 2>&1 || { echo "Brak plików w snapshots"; exit 1; }
+          # health_report.json:
+          test -s "$D/health_report.json" || { echo "Brak lub pusty health_report.json"; exit 1; }
+
       - name: "Upload artifact (data/)"
         uses: actions/upload-artifact@v4
         with:
