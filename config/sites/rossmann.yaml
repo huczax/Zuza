@@ -1,153 +1,61 @@
-site: rossmann
-base_url: "https://www.rossmann.pl/"
-schedules:
-  - cron: "0 6,18 * * *"  # run twice daily at 06:00 and 18:00 (Europe/Warsaw)
-stealth:
-  user_agent_rotation: true
-  mobile_profile: true
-  random_viewport: true
-targets:
+site:
+  key: rossmann
+  entry_url: "https://www.rossmann.pl/"
+
+sections:
+  # Sekcja 1 – hero slider
   - name: hero_slider
-    # hero slider section (Section 1)
-    input:
-      type: css
-      value: "section[class*=AutoPlayBanner-module_wideContainer]"
-    fields:
-      desktop_img:
-        selector: "img"
-        attr: "src"
-      mobile_source:
-        selector: "source"
-        attr: "srcset"
-      alt:
-        selector: "img"
-        attr: "alt"
-      cta_href:
-        selector: "a"
-        attr: "href"
-        optional: true
-      title:
-        selector: ".h1, .h2, .h3, .label-large"
-        text: true
-        many: true
-    validate:
+    input: {type: css, value: "section[class*=AutoPlayBanner-module_wideContainer]"}
+    list:
+      item_selector: "picture"
+      fields:
+        - {name: desktop_image, type: image, selector: "img", attr: src}
+        - {name: mobile_srcset, type: srcset, selector: "source", attr: srcset}
+        - {name: alt, type: attr, selector: "img", attr: alt}
+        - {name: cta_href, type: attr, selector: "a", attr: href}
+        - {name: title, type: text_optional, selector: ".h1, .h2, .h3, .label-large"}
+    validation:
       min_count: 1
-      required_attrs:
-        - desktop_img
-        - alt
-    download_images:
-      enabled: true
-      transcode:
-        - "webp->jpg"
-        - "avif->png"
-      ocr: false
 
-  - name: promotions_list
-    # product grid in promotions section (Section 2)
-    input:
-      type: css
-      value: "div[data-testid='product-container']"
-    fields:
-      img:
-        selector: "img[data-testid='product-image']"
-        attr: "src"
-      alt:
-        selector: "img[data-testid='product-image']"
-        attr: "alt"
-      brand:
-        selector: "[data-testid='product-brand']"
-        text: true
-      description:
-        selector: "[data-testid='product-caption']"
-        text: true
-      price:
-        selector: "[data-testid='product-price']"
-        text: true
-      lowest_30:
-        selector: "[data-testid='lowest-price-in-30-days'], .styles-module_strike--3Okb2"
-        text: true
-        optional: true
-      badge:
-        selector: ".styles-module_badge--ptqlS"
-        text: true
-        optional: true
-      link:
-        selector: "a[href]"
-        attr: "href"
-    validate:
+  # Sekcja 2 – promocje (grid)
+  - name: promos
+    input: {type: css, value: "div[data-testid='product-container']"}
+    list:
+      item_selector: "div[data-testid='product-container']"
+      fields:
+        - {name: image_url, type: image, selector: "img[data-testid='product-image']", attr: src}
+        - {name: alt, type: attr, selector: "img[data-testid='product-image']", attr: alt}
+        - {name: brand, type: text, selector: "[data-testid='product-brand']"}
+        - {name: caption, type: text, selector: "[data-testid='product-caption']"}
+        - {name: price_text, type: price_text, selector: "[data-testid='product-price']"}
+        - {name: lowest_30, type: text_optional, selector: "[data-testid='lowest-price-in-30-days'], .styles-module_strike--3Okb2"}
+        - {name: badge, type: text_optional, selector: ".styles-module_badge--ptqlS"}
+        - {name: link, type: attr, selector: "a[href]", attr: href}
+    validation:
       min_count: 4
-    download_images:
-      enabled: true
-      ocr: false
 
+  # Sekcja 3 – baner graficzny
   - name: banner_graphic
-    # single banner image (Section 3)
-    input:
-      type: css
-      value: "img[alt*='Łap wspomnienia'], img[alt*='fotoprodukty']"
+    input: {type: css, value: "img[alt*='Łap wspomnienia'], img[alt*='fotoprodukty']"}
     fields:
-      img:
-        selector: "img"
-        attr: "src"
-      alt:
-        selector: "img"
-        attr: "alt"
-    validate:
+      - {name: image_url, type: image, selector: ":self", attr: src}
+      - {name: alt, type: attr, selector: ":self", attr: alt}
+    validation:
       min_count: 1
-    download_images:
-      enabled: true
 
+  # Sekcja 4 – slider produktowy podobny do gridu
   - name: section4_product_slider
-    # product slider in Section 4 (similar to promotions_list)
-    input:
-      type: css
-      value: "div[data-testid='product-container']"
-    fields:
-      img:
-        selector: "img[data-testid='product-image']"
-        attr: "src"
-      alt:
-        selector: "img[data-testid='product-image']"
-        attr: "alt"
-      brand:
-        selector: "[data-testid='product-brand']"
-        text: true
-      description:
-        selector: "[data-testid='product-caption']"
-        text: true
-      price:
-        selector: "[data-testid='product-price']"
-        text: true
-      lowest_30:
-        selector: "[data-testid='lowest-price-in-30-days'], .styles-module_strike--3Okb2"
-        text: true
-        optional: true
-      badge:
-        selector: ".styles-module_badge--ptqlS"
-        text: true
-        optional: true
-      link:
-        selector: "a[href]"
-        attr: "href"
-    validate:
+    input: {type: css, value: "div[data-testid='product-container']"}
+    list:
+      item_selector: "div[data-testid='product-container']"
+      fields:
+        - {name: image_url, type: image, selector: "img[data-testid='product-image']", attr: src}
+        - {name: alt, type: attr, selector: "img[data-testid='product-image']", attr: alt}
+        - {name: brand, type: text, selector: "[data-testid='product-brand']"}
+        - {name: caption, type: text, selector: "[data-testid='product-caption']"}
+        - {name: price_text, type: price_text, selector: "[data-testid='product-price']"}
+        - {name: lowest_30, type: text_optional, selector: "[data-testid='lowest-price-in-30-days'], .styles-module_strike--3Okb2"}
+        - {name: badge, type: text_optional, selector: ".styles-module_badge--ptqlS"}
+        - {name: link, type: attr, selector: "a[href]", attr: href}
+    validation:
       min_count: 4
-    download_images:
-      enabled: true
-      ocr: false
-
-output:
-  format: jsonl
-  base_dir: "data/rossmann"
-alerts:
-  email:
-    to:
-      - "test.transfer416@passinbox.com"
-    on:
-      - "health_fail"
-      - "big_diff"
-diff:
-  compare_keys:
-    - img
-    - price
-    - badge
-  big_change_threshold: 0.4
