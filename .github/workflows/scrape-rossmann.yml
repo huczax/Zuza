@@ -77,6 +77,12 @@ jobs:
           asyncio.run(main())
           PY
 
+      - name: Preflight: sprawdź DNS/HTTP do rossmann.pl
+        run: |
+          set -euxo pipefail
+          getent hosts www.rossmann.pl || true
+          curl -I --max-time 20 https://www.rossmann.pl/robots.txt || exit 1
+
       - name: "Run scraper (debug) + list outputs"
         env:
           LOGURU_LEVEL: DEBUG
