@@ -95,6 +95,35 @@ jobs:
             sed -n '1,200p' data/rossmann/*/health_report.json
           fi
 
+      - name: List outputs (debug)
+        if: always()
+        run: |
+          ls -R data || true
+          find data -type f | sort || true
+
+      - name: Pack data & traces (smaller upload)
+        if: always()
+        run: |
+          TODAY=$(TZ=Europe/Warsaw date +%F)
+          mkdir -p out
+          tar -czf out/data-$TODAY.tar.gz -C data .
+          if [ -d traces ]; then
+            tar -czf out/traces-$TODAY.tar.gz -C traces .
+          fi
+          ls -lh out
+
+      - name: Upload run artifacts (90 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rossmann-${{ github.run_id }}
+          path: |
+            out/*.tar.gz
+            data/rossmann/**
+          if-no-files-found: warn
+          retention-days: 90
+
+
       - name: Assert snapshots & health report exist
         run: |
           set -euo pipefail
